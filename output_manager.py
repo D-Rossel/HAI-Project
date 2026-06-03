@@ -1,0 +1,1 @@
+""" Speichert das generierte Bild im Output-Ordner und aktualisiert es für TouchDesigner. """

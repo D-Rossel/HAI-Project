@@ -1,0 +1,1 @@
+""" Lädt und verwaltet die Audioquelle (Datei oder Stream), die später analysiert wird. """

@@ -1,0 +1,1 @@
+""" Extrahiert mit Essentia musikalische Merkmale wie BPM, Energie und Klangcharakter aus dem Audio. """

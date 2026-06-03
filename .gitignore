@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+
+# Outputs (bei dir wichtig!)
+output/
+*.png
+*.jpg
+*.jpeg
+
+# ML / AI models (sehr wichtig!)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# HuggingFace / cache
+.cache/
+huggingface/
+
+# Logs
+*.log
