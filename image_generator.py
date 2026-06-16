@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     gen = ImageGenerator()
 
-    prompt = "square"
+    prompt = "transparent black backround with square"
 
     image = gen.generate_image(
         prompt=prompt,
@@ -80,6 +80,23 @@ if __name__ == "__main__":
         height=256
     )
 
-    image.save("output.png")
+    
+    image.save("output1.png")
 
-    print("Bild gespeichert: output.png")
+    print("Bild gespeichert: output1.png")
+
+    import time
+    time.sleep(1)
+    prompt = "circle"
+
+    image = gen.generate_image(
+        prompt=prompt,
+        steps=50,
+        width=256,
+        height=256
+    )
+
+    
+    image.save("output2.png")
+
+    print("Bild gespeichert: output2.png")
