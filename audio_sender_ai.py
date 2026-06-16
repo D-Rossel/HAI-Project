@@ -10,7 +10,7 @@ ws = websocket.WebSocket()
 ws.connect(WS_URL)
 
 TARGET_SR = 16000
-BLOCKSIZE = 2048  # smaller = more stable for streaming models
+BLOCKSIZE = 1024 #2048  # smaller = more stable for streaming models
 
 
 def callback(indata, frames, time, status):

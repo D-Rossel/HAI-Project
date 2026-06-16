@@ -1,23 +1,52 @@
-""" Erzeugt aus dem Prompt mithilfe von Stable Diffusion ein Bild. """
-
 import torch
 from diffusers import StableDiffusionPipeline
 
-class ImageGenerator:
-    def __init__(self, model_id="runwayml/stable-diffusion-v1-5"):
-        """
-        Lädt das Stable-Diffusion-Modell einmal beim Start.
-        """
-        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
 
+class ImageGenerator:
+    def __init__(
+        self,
+        model_id="runwayml/stable-diffusion-v1-5",
+        local_path=None,
+        device=None,
+        use_auth_token=None
+    ):
+        """
+        Lädt Stable Diffusion entweder aus HF oder lokalem Pfad.
+        """
+
+        # ----------------------------
+        # Device Auswahl
+        # ----------------------------
+        if device is None:
+            if torch.backends.mps.is_available():
+                device = "mps"
+            elif torch.cuda.is_available():
+                device = "cuda"
+            else:
+                device = "cpu"
+
+        self.device = device
+
+        # ----------------------------
+        # Modellquelle
+        # ----------------------------
+        model_source = local_path if local_path else model_id
+
+        print(f"Loading model from: {model_source}")
+        print(f"Using device: {self.device}")
+
+        # ----------------------------
+        # Pipeline laden
+        # ----------------------------
         self.pipe = StableDiffusionPipeline.from_pretrained(
-            model_id,
-            torch_dtype=torch.float16
+            model_source,
+            torch_dtype=torch.float16 if self.device != "cpu" else torch.float32,
+            token=use_auth_token
         )
 
         self.pipe = self.pipe.to(self.device)
 
-        # optional: schneller machen
+        # Optional: Speed tweak (Achtung: kann Qualität beeinflussen)
         self.pipe.safety_checker = None
 
     def generate_image(self, prompt, steps=25, width=512, height=512):
@@ -32,22 +61,25 @@ class ImageGenerator:
             height=height
         )
 
-        image = result.images[0]
-        return image
-    
-    
-    
-'''
-Nutzung:
+        return result.images[0]
 
-from image_generator import ImageGenerator
 
-gen = ImageGenerator()
+# ----------------------------------------------------
+# TEST / DEMO (wird NICHT beim Import ausgeführt)
+# ----------------------------------------------------
+if __name__ == "__main__":
 
-prompt = "cyberpunk city, neon lights, rainy atmosphere, cinematic, ultra detailed"
+    gen = ImageGenerator()
 
-image = gen.generate_image(prompt)
+    prompt = "square"
 
-image.save("output.png")
+    image = gen.generate_image(
+        prompt=prompt,
+        steps=50,
+        width=256,
+        height=256
+    )
 
-print("Bild gespeichert!")'''
+    image.save("output.png")
+
+    print("Bild gespeichert: output.png")
