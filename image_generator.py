@@ -67,7 +67,7 @@ class ImageGenerator:
 # ----------------------------------------------------
 # TEST / DEMO (wird NICHT beim Import ausgeführt)
 # ----------------------------------------------------
-if __name__ == "__main__":
+'''if __name__ == "__main__":
 
     gen = ImageGenerator()
 
@@ -99,4 +99,4 @@ if __name__ == "__main__":
     
     image.save("output2.png")
 
-    print("Bild gespeichert: output2.png")
+    print("Bild gespeichert: output2.png")'''
