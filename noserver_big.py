@@ -5,10 +5,10 @@ import sounddevice as sd
 import essentia.standard as es
 
 from Moodstate import MoodState
-from image_generator import ImageGenerator
+from image_generator2 import ImageGenerator
 
 rms = es.RMS()
-SR = 41000
+SR = 44100 #oder 48000
 BLOCKSIZE = 1024
 
 BUFFER_SECONDS = 4
@@ -16,13 +16,9 @@ BUFFER_SIZE = SR * BUFFER_SECONDS
 INFER_EVERY = 40
 RMS_THRESHOLD = 0.01
 SILENT_FRAMES_RESET = 6
-
 IMAGE_EVERY = INFER_EVERY * 10
 
 audio_queue = queue.Queue(maxsize=4)
-
-# Queue für Bild-Jobs: maxsize=1, damit sich keine Anfragen stapeln,
-# falls die Generierung länger dauert als das Intervall.
 image_job_queue = queue.Queue(maxsize=1)
 
 
@@ -34,7 +30,6 @@ def normalize(audio):
 
 
 def process(audio_buffer):
-    print("process")
     audio = audio_buffer.astype(np.float32)
 
     if audio.ndim > 1:
@@ -44,21 +39,20 @@ def process(audio_buffer):
 
     es_rms = rms(audio)
     if es_rms < RMS_THRESHOLD:
-        print("silence")
         return None
 
     energy = es.Energy()(audio)
     zcr = es.ZeroCrossingRate()(audio)
     centroid = es.SpectralCentroidTime()(audio)
-    key, scale, strength = es.KeyExtractor()(audio)
+    #key, scale, strength = es.KeyExtractor()(audio)
 
     features = {
         "energy": energy,
         "zcr": zcr,
         "centroid": centroid,
-        "key": key,
-        "scale": scale,
-        "strength": strength,
+        #"key": key,
+        #"scale": scale,
+        #"strength": strength,
         "rms": es_rms,
     }
 
@@ -101,26 +95,35 @@ def image_worker():
             break
 
         try:
-            final_prompt = "Generate a picture that visualises music with the following adjactives: "
-            for x in  mood_top:
-                final_prompt += x + ", "
-            print("🎨 Generiere Bild für Mood:", mood_top)
+            final_prompt = build_prompt(mood_top)
             image = gen.generate_image(
                 prompt=final_prompt,
-                steps=5,
-                width=256,
-                height=256
+                steps=4,   # ← FLUX-schnell: 4 ist optimal
+                width=512,
+                height=512
             )
             image_counter += 1
-            image.save(f"output.png")
-            #image.save(f"output_{image_counter}.png")
-            print("✅ Bild gespeichert: output_%d.png" % image_counter)
+            image.save("output.png")
+
         except Exception as e:
             print("Image generation error:", e)
 
+def build_prompt(mood_top: list[str]) -> str:
+    unique_adjectives = list(dict.fromkeys(mood_top))
 
+    if len(unique_adjectives) > 1:
+        adjective_str = ", ".join(unique_adjectives[:-1]) + " and " + unique_adjectives[-1]
+    else:
+        adjective_str = unique_adjectives[0] if unique_adjectives else "neutral"
+    setting = 'Sea'
+    erg = (
+        f"An abstract piece of generative art that visually expresses music "
+        f"with a {adjective_str} mood. The setting should be: {setting} Flowing shapes, expressive color "
+        f"palette, atmospheric lighting, high detail, artstation quality."
+    )
+    print(erg)
+    return erg
 def main():
-    print("🎬 Starting local Essentia mood analysis on macOS with BlackHole 2ch...")
     print(sd.query_devices())
 
     state = MoodState(history_size=8, top_k=5)
@@ -165,6 +168,7 @@ def main():
                 mood = state.update(features)
                 print("Mood (aktuell):", mood["current"])
                 print("Mood (Top):", mood["top"])
+                print("____________________________")
 
                 if counter % IMAGE_EVERY == 0:
                     try:
@@ -172,7 +176,7 @@ def main():
                         # wird dieser Job einfach übersprungen statt zu warten.
                         image_job_queue.put_nowait(mood["top"])
                     except queue.Full:
-                        print("⏳ Bild-Worker noch beschäftigt, Job übersprungen.")
+                        print("Bild-Worker noch beschäftigt, Job übersprungen.")
 
             except Exception as e:
                 print("Processing error:", e)

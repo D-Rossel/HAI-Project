@@ -68,12 +68,12 @@ class MoodState:
         centroid_bucket = self._bucket(features["centroid"], self.CENTROID_THRESHOLDS)
         adjectives += self.ADJECTIVES["centroid"][centroid_bucket]
 
-        scale = features.get("scale", "").lower()
-        if scale in ("major", "minor"):
-            adjectives += self.ADJECTIVES["scale"][scale]
+        #scale = features.get("scale", "").lower()
+        #if scale in ("major", "minor"):
+        #    adjectives += self.ADJECTIVES["scale"][scale]
 
-        strength_bucket = self._bucket(features["strength"], self.STRENGTH_THRESHOLDS)
-        adjectives += self.ADJECTIVES["strength"][strength_bucket]
+        #strength_bucket = self._bucket(features["strength"], self.STRENGTH_THRESHOLDS)
+        #adjectives += self.ADJECTIVES["strength"][strength_bucket]
 
         return adjectives
 

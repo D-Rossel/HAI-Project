@@ -2,7 +2,7 @@ import torch
 from diffusers import StableDiffusionPipeline
 
 
-class ImageGenerator:
+class ImageGeneratorOLD:
     def __init__(
         self,
         model_id="runwayml/stable-diffusion-v1-5",
