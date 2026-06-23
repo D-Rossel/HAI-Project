@@ -3,12 +3,13 @@ import threading
 import numpy as np
 import sounddevice as sd
 import essentia.standard as es
+import tkinter as tk
 
 from Moodstate import MoodState
 from image_generator2 import ImageGenerator
 
 rms = es.RMS()
-SR = 44100 #oder 48000
+SR = 44100
 BLOCKSIZE = 1024
 
 BUFFER_SECONDS = 4
@@ -17,6 +18,8 @@ INFER_EVERY = 40
 RMS_THRESHOLD = 0.01
 SILENT_FRAMES_RESET = 6
 IMAGE_EVERY = INFER_EVERY * 10
+
+user_input = []
 
 audio_queue = queue.Queue(maxsize=4)
 image_job_queue = queue.Queue(maxsize=1)
@@ -31,10 +34,8 @@ def normalize(audio):
 
 def process(audio_buffer):
     audio = audio_buffer.astype(np.float32)
-
     if audio.ndim > 1:
         audio = audio[:, 0]
-
     audio = audio[-BUFFER_SIZE:]
 
     es_rms = rms(audio)
@@ -44,28 +45,21 @@ def process(audio_buffer):
     energy = es.Energy()(audio)
     zcr = es.ZeroCrossingRate()(audio)
     centroid = es.SpectralCentroidTime()(audio)
-    #key, scale, strength = es.KeyExtractor()(audio)
 
     features = {
         "energy": energy,
         "zcr": zcr,
         "centroid": centroid,
-        #"key": key,
-        #"scale": scale,
-        #"strength": strength,
         "rms": es_rms,
     }
-
-    print(features)
+    #print(features)
     return features
 
 
 def callback(indata, frames, time, status):
     if status:
         print(status)
-
     audio = indata.mean(axis=1).astype(np.float32)
-
     try:
         audio_queue.put_nowait(audio.copy())
     except queue.Full:
@@ -80,60 +74,50 @@ def callback(indata, frames, time, status):
 
 
 def image_worker():
-    """
-    Läuft in eigenem Thread. Nimmt Mood-Prompts aus image_job_queue
-    und generiert Bilder, ohne den Audio-Analyse-Loop zu blockieren.
-    """
     gen = ImageGenerator()
     image_counter = 0
-
     while True:
-        mood_top = image_job_queue.get()  # blockiert, bis ein Job da ist
-
+        mood_top = image_job_queue.get()
         if mood_top is None:
-            # Sentinel zum Beenden des Threads
             break
-
         try:
             final_prompt = build_prompt(mood_top)
             image = gen.generate_image(
                 prompt=final_prompt,
-                steps=4,   # ← FLUX-schnell: 4 ist optimal
+                steps=4,
                 width=512,
                 height=512
             )
             image_counter += 1
             image.save("output.png")
-
         except Exception as e:
             print("Image generation error:", e)
 
+
 def build_prompt(mood_top: list[str]) -> str:
     unique_adjectives = list(dict.fromkeys(mood_top))
-
     if len(unique_adjectives) > 1:
         adjective_str = ", ".join(unique_adjectives[:-1]) + " and " + unique_adjectives[-1]
     else:
         adjective_str = unique_adjectives[0] if unique_adjectives else "neutral"
-    setting = 'Sea'
+
+    user_part = f" The picture should be influenced by: {', '.join(user_input)}." if user_input else ""
+
     erg = (
-        f"An abstract piece of generative art that visually expresses music "
-        f"with a {adjective_str} mood. The setting should be: {setting} Flowing shapes, expressive color "
+        f"An abstract piece of generative art "
+        f"with a {adjective_str} mood.{user_part} Flowing shapes, expressive color "
         f"palette, atmospheric lighting, high detail, artstation quality."
     )
     print(erg)
     return erg
-def main():
-    print(sd.query_devices())
 
+
+def audio_loop():
+    """Läuft im Hintergrund-Thread — der komplette Audio+Mood-Loop."""
     state = MoodState(history_size=8, top_k=5)
     buffer = np.zeros(BUFFER_SIZE, dtype=np.float32)
     counter = 0
     silent_frames = 0
-
-    # Worker-Thread für Bildgenerierung starten
-    worker_thread = threading.Thread(target=image_worker, daemon=True)
-    worker_thread.start()
 
     with sd.InputStream(
         device=2,
@@ -157,7 +141,6 @@ def main():
 
             try:
                 features = process(buffer)
-
                 if features is None:
                     silent_frames += 1
                     if silent_frames >= SILENT_FRAMES_RESET:
@@ -166,20 +149,66 @@ def main():
 
                 silent_frames = 0
                 mood = state.update(features)
-                print("Mood (aktuell):", mood["current"])
-                print("Mood (Top):", mood["top"])
-                print("____________________________")
+                #print("Mood (aktuell):", mood["current"])
+                #print("Mood (Top):", mood["top"])
+                #print("____________________________")
 
                 if counter % IMAGE_EVERY == 0:
                     try:
-                        # Nicht-blockierend: falls der Worker noch beschäftigt ist,
-                        # wird dieser Job einfach übersprungen statt zu warten.
                         image_job_queue.put_nowait(mood["top"])
                     except queue.Full:
                         print("Bild-Worker noch beschäftigt, Job übersprungen.")
 
             except Exception as e:
                 print("Processing error:", e)
+
+
+def main():
+    print(sd.query_devices())
+
+    # Audio- und Bild-Worker als Daemon-Threads
+    threading.Thread(target=audio_loop, daemon=True).start()
+    threading.Thread(target=image_worker, daemon=True).start()
+
+    # ----------------------------
+    # Tkinter im MAIN THREAD
+    # ----------------------------
+    def add_word():
+        word = entry.get().strip()
+        if word:
+            user_input.append(word)
+            entry.delete(0, tk.END)
+            update_label()
+
+    def clear_words():
+        user_input.clear()
+        update_label()
+
+    def update_label():
+        label_words.config(
+            text="Words: " + ", ".join(user_input) if user_input else "Words: (none)"
+        )
+
+    root = tk.Tk()
+    root.title("Mood Input")
+    root.geometry("350x160")
+    root.resizable(False, False)
+
+    tk.Label(root, text="Add mood word:", font=("Helvetica", 12)).pack(pady=(12, 4))
+
+    entry = tk.Entry(root, font=("Helvetica", 12), width=28)
+    entry.pack()
+    entry.bind("<Return>", lambda e: add_word())
+
+    btn_frame = tk.Frame(root)
+    btn_frame.pack(pady=8)
+    tk.Button(btn_frame, text="Add", width=10, command=add_word).pack(side=tk.LEFT, padx=4)
+    tk.Button(btn_frame, text="Clear", width=10, command=clear_words).pack(side=tk.LEFT, padx=4)
+
+    label_words = tk.Label(root, text="Words: (none)", font=("Helvetica", 10), fg="gray")
+    label_words.pack()
+
+    root.mainloop()  # blockiert und hält das Programm am Leben
 
 
 if __name__ == "__main__":

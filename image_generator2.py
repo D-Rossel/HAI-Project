@@ -46,7 +46,7 @@ if __name__ == "__main__":
                 final_prompt = build_prompt(["dark", "sweet", "calm"])
                 image = gen.generate_image(
                     prompt=final_prompt,
-                    steps=4,   # ← FLUX-schnell: 4 ist optimal
+                    steps=4,
                     width=512,
                     height=512
                 )
