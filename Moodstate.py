@@ -1,16 +1,9 @@
 from collections import deque, Counter
 
 class MoodState:
-    """
-    Mappt rohe Audio-Features (Energy, ZCR, Spectral Centroid, Key/Scale/Strength)
-    auf beschreibende Adjektive für Klang/Musik-Charakter.
-    """
-
-    # Schwellenwerte – ggf. an dein Material anpassen
     ENERGY_THRESHOLDS = (1000, 4000)        # low < t0 <= mid <= t1 < high
     ZCR_THRESHOLDS = (0.05, 0.15)
     CENTROID_THRESHOLDS = (1500, 4000)     # Hz
-    STRENGTH_THRESHOLDS = (0.4, 0.7)       # Key-Strength (Tonalitäts-Konfidenz)
 
     ADJECTIVES = {
         "energy": {
@@ -27,15 +20,6 @@ class MoodState:
             "low":  ["dark", "bass-heavy", "weighty"],
             "mid":  ["balanced", "natural"],
             "high": ["bright", "brilliant", "airy"],
-        },
-        "scale": {
-            "major": ["happy", "cheerful", "open"],
-            "minor": ["melancholic", "dark", "introspective"],
-        },
-        "strength": {
-            "low":  ["diffuse", "atonal", "floating"],
-            "mid":  ["slightly tonal"],
-            "high": ["clear", "tonal", "focused"],
         },
     }
 
@@ -68,22 +52,11 @@ class MoodState:
         centroid_bucket = self._bucket(features["centroid"], self.CENTROID_THRESHOLDS)
         adjectives += self.ADJECTIVES["centroid"][centroid_bucket]
 
-        #scale = features.get("scale", "").lower()
-        #if scale in ("major", "minor"):
-        #    adjectives += self.ADJECTIVES["scale"][scale]
-
-        #strength_bucket = self._bucket(features["strength"], self.STRENGTH_THRESHOLDS)
-        #adjectives += self.ADJECTIVES["strength"][strength_bucket]
-
         return adjectives
 
     # ---------- Public API ----------
 
     def update(self, features: dict) -> dict:
-        """
-        Nimmt ein Feature-Dict (energy, zcr, centroid, key, scale, strength, rms)
-        und gibt ein Dict mit Einzel-Kategorien + geglätteten Top-Adjektiven zurück.
-        """
         adjectives = self._features_to_adjectives(features)
         self.history.extend(adjectives)
 
@@ -93,8 +66,6 @@ class MoodState:
         return {
             "current": adjectives,
             "top": top_adjectives,
-            "key": features.get("key"),
-            "scale": features.get("scale"),
         }
 
     def reset(self):
