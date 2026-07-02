@@ -120,7 +120,7 @@ def audio_loop():
     silent_frames = 0
 
     with sd.InputStream(
-        device=2,
+        device=1,
         channels=1,
         samplerate=SR,
         blocksize=BLOCKSIZE,
@@ -208,7 +208,7 @@ def main():
     label_words = tk.Label(root, text="Words: (none)", font=("Helvetica", 10), fg="gray")
     label_words.pack()
 
-    root.mainloop()  # blockiert und hält das Programm am Leben
+    root.mainloop()
 
 
 if __name__ == "__main__":
