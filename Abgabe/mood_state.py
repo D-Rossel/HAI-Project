@@ -1,46 +1,48 @@
-from collections import deque, Counter
+from collections import Counter, deque
+
 
 class MoodState:
-    ENERGY_THRESHOLDS = (1000, 4000)        # low < t0 <= mid <= t1 < high
+    """Track recent audio-derived mood descriptors and return dominant adjectives."""
+
+    ENERGY_THRESHOLDS = (1000, 4000)  # low < t0 <= mid <= t1 < high
     ZCR_THRESHOLDS = (0.05, 0.15)
-    CENTROID_THRESHOLDS = (1500, 4000)     # Hz
+    CENTROID_THRESHOLDS = (1500, 4000)  # Hz
 
     ADJECTIVES = {
         "energy": {
-            "low":  ["calm", "gentle", "subdued"],
-            "mid":  ["balanced", "flowing"],
+            "low": ["calm", "gentle", "subdued"],
+            "mid": ["balanced", "flowing"],
             "high": ["energetic", "driving", "intense"],
         },
         "zcr": {
-            "low":  ["warm", "soft", "round"],
-            "mid":  ["balanced"],
+            "low": ["warm", "soft", "round"],
+            "mid": ["balanced"],
             "high": ["sharp", "percussive", "noisy"],
         },
         "centroid": {
-            "low":  ["dark", "bass-heavy", "weighty"],
-            "mid":  ["balanced", "natural"],
+            "low": ["dark", "bass-heavy", "weighty"],
+            "mid": ["balanced", "natural"],
             "high": ["bright", "brilliant", "airy"],
         },
     }
 
-    def __init__(self, history_size: int = 8, top_k: int = 5):
+    def __init__(self, history_size: int = 8, top_k: int = 5) -> None:
         self.history_size = history_size
         self.top_k = top_k
         self.history = deque(maxlen=history_size)
 
-    # ---------- Hilfsfunktionen ----------
-
     @staticmethod
     def _bucket(value: float, thresholds: tuple[float, float]) -> str:
-        low_t, high_t = thresholds
-        if value < low_t:
+        """Map a numeric feature value to a low/mid/high bucket."""
+        low_threshold, high_threshold = thresholds
+        if value < low_threshold:
             return "low"
-        elif value < high_t:
+        if value < high_threshold:
             return "mid"
-        else:
-            return "high"
+        return "high"
 
     def _features_to_adjectives(self, features: dict) -> list[str]:
+        """Convert extracted audio features into descriptive mood adjectives."""
         adjectives: list[str] = []
 
         energy_bucket = self._bucket(features["energy"], self.ENERGY_THRESHOLDS)
@@ -54,19 +56,19 @@ class MoodState:
 
         return adjectives
 
-    # ---------- Public API ----------
-
     def update(self, features: dict) -> dict:
+        """Update the mood history and return current and dominant descriptors."""
         adjectives = self._features_to_adjectives(features)
         self.history.extend(adjectives)
 
         counts = Counter(self.history)
-        top_adjectives = [adj for adj, _ in counts.most_common(self.top_k)]
+        top_adjectives = [adjective for adjective, _ in counts.most_common(self.top_k)]
 
         return {
             "current": adjectives,
             "top": top_adjectives,
         }
 
-    def reset(self):
+    def reset(self) -> None:
+        """Clear the rolling mood history."""
         self.history.clear()

@@ -1,16 +1,18 @@
 import queue
 import threading
-import numpy as np
-import sounddevice as sd
-import essentia.standard as es
 import tkinter as tk
 
-from Moodstate import MoodState
-from image_generator2 import ImageGenerator
+import essentia.standard as es
+import numpy as np
+import sounddevice as sd
+
+from mood_state import MoodState
+from image_generator import ImageGenerator
+
 
 rms = es.RMS()
 SR = 44100
-BLOCKSIZE = 1024
+BLOCK_SIZE = 1024
 
 BUFFER_SECONDS = 4
 BUFFER_SIZE = SR * BUFFER_SECONDS
@@ -19,20 +21,22 @@ RMS_THRESHOLD = 0.01
 SILENT_FRAMES_RESET = 6
 IMAGE_EVERY = INFER_EVERY * 10
 
-user_input = []
+user_input: list[str] = []
 
 audio_queue = queue.Queue(maxsize=4)
 image_job_queue = queue.Queue(maxsize=1)
 
 
-def normalize(audio):
+def normalize(audio: np.ndarray) -> np.ndarray:
+    """Normalize audio by peak amplitude."""
     peak = np.max(np.abs(audio))
     if peak < 1e-8:
         return audio
     return audio / peak
 
 
-def process(audio_buffer):
+def process(audio_buffer: np.ndarray):
+    """Extract features from the rolling audio buffer."""
     audio = audio_buffer.astype(np.float32)
     if audio.ndim > 1:
         audio = audio[:, 0]
@@ -52,13 +56,14 @@ def process(audio_buffer):
         "centroid": centroid,
         "rms": es_rms,
     }
-    #print(features)
     return features
 
 
-def callback(indata, frames, time, status):
+def callback(indata, frames, time, status) -> None:
+    """Audio input callback that pushes the latest chunk into the queue."""
     if status:
         print(status)
+
     audio = indata.mean(axis=1).astype(np.float32)
     try:
         audio_queue.put_nowait(audio.copy())
@@ -73,47 +78,49 @@ def callback(indata, frames, time, status):
             pass
 
 
-def image_worker():
-    gen = ImageGenerator()
-    image_counter = 0
+def build_prompt(top_moods: list[str]) -> str:
+    """Build a text prompt from detected moods and optional user words."""
+    unique_adjectives = list(dict.fromkeys(top_moods))
+    if len(unique_adjectives) > 1:
+        adjective_text = ", ".join(unique_adjectives[:-1]) + " and " + unique_adjectives[-1]
+    else:
+        adjective_text = unique_adjectives[0] if unique_adjectives else "neutral"
+
+    user_part = f" The picture should be influenced by: {', '.join(user_input)}." if user_input else ""
+    prompt = (
+        f"An abstract piece of generative art "
+        f"with a {adjective_text} mood.{user_part} Flowing shapes, expressive color "
+        f"palette, atmospheric lighting, high detail, artstation quality."
+    )
+
+    print(prompt)
+    return prompt
+
+
+def image_worker() -> None:
+    """Background worker that generates images from queued mood descriptors."""
+    generator = ImageGenerator()
+
     while True:
-        mood_top = image_job_queue.get()
-        if mood_top is None:
+        top_moods = image_job_queue.get()
+        if top_moods is None:
             break
+
         try:
-            final_prompt = build_prompt(mood_top)
-            image = gen.generate_image(
+            final_prompt = build_prompt(top_moods)
+            image = generator.generate_image(
                 prompt=final_prompt,
                 steps=4,
                 width=512,
-                height=512
+                height=512,
             )
-            image_counter += 1
             image.save("output.png")
-        except Exception as e:
-            print("Image generation error:", e)
+        except Exception as error:
+            print("Image generation error:", error)
 
 
-def build_prompt(mood_top: list[str]) -> str:
-    unique_adjectives = list(dict.fromkeys(mood_top))
-    if len(unique_adjectives) > 1:
-        adjective_str = ", ".join(unique_adjectives[:-1]) + " and " + unique_adjectives[-1]
-    else:
-        adjective_str = unique_adjectives[0] if unique_adjectives else "neutral"
-
-    user_part = f" The picture should be influenced by: {', '.join(user_input)}." if user_input else ""
-
-    erg = (
-        f"An abstract piece of generative art "
-        f"with a {adjective_str} mood.{user_part} Flowing shapes, expressive color "
-        f"palette, atmospheric lighting, high detail, artstation quality."
-    )
-    print(erg)
-    return erg
-
-
-def audio_loop():
-    """Läuft im Hintergrund-Thread — der komplette Audio+Mood-Loop."""
+def audio_loop() -> None:
+    """Run the complete audio and mood processing loop in a background thread."""
     state = MoodState(history_size=8, top_k=5)
     buffer = np.zeros(BUFFER_SIZE, dtype=np.float32)
     counter = 0
@@ -123,9 +130,9 @@ def audio_loop():
         device=1,
         channels=1,
         samplerate=SR,
-        blocksize=BLOCKSIZE,
+        blocksize=BLOCK_SIZE,
         dtype="float32",
-        callback=callback
+        callback=callback,
     ):
         while True:
             chunk = audio_queue.get()
@@ -149,42 +156,36 @@ def audio_loop():
 
                 silent_frames = 0
                 mood = state.update(features)
-                #print("Mood (aktuell):", mood["current"])
-                #print("Mood (Top):", mood["top"])
-                #print("____________________________")
 
                 if counter % IMAGE_EVERY == 0:
                     try:
                         image_job_queue.put_nowait(mood["top"])
                     except queue.Full:
-                        print("Bild-Worker noch beschäftigt, Job übersprungen.")
+                        print("Image worker is still busy, skipped job.")
 
-            except Exception as e:
-                print("Processing error:", e)
+            except Exception as error:
+                print("Processing error:", error)
 
 
-def main():
+def main() -> None:
+    """Start the audio and image workers and run the Tkinter UI."""
     print(sd.query_devices())
 
-    # Audio- und Bild-Worker als Daemon-Threads
     threading.Thread(target=audio_loop, daemon=True).start()
     threading.Thread(target=image_worker, daemon=True).start()
 
-    # ----------------------------
-    # Tkinter im MAIN THREAD
-    # ----------------------------
-    def add_word():
+    def add_word() -> None:
         word = entry.get().strip()
         if word:
             user_input.append(word)
             entry.delete(0, tk.END)
             update_label()
 
-    def clear_words():
+    def clear_words() -> None:
         user_input.clear()
         update_label()
 
-    def update_label():
+    def update_label() -> None:
         label_words.config(
             text="Words: " + ", ".join(user_input) if user_input else "Words: (none)"
         )
@@ -198,12 +199,12 @@ def main():
 
     entry = tk.Entry(root, font=("Helvetica", 12), width=28)
     entry.pack()
-    entry.bind("<Return>", lambda e: add_word())
+    entry.bind("<Return>", lambda event: add_word())
 
-    btn_frame = tk.Frame(root)
-    btn_frame.pack(pady=8)
-    tk.Button(btn_frame, text="Add", width=10, command=add_word).pack(side=tk.LEFT, padx=4)
-    tk.Button(btn_frame, text="Clear", width=10, command=clear_words).pack(side=tk.LEFT, padx=4)
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=8)
+    tk.Button(button_frame, text="Add", width=10, command=add_word).pack(side=tk.LEFT, padx=4)
+    tk.Button(button_frame, text="Clear", width=10, command=clear_words).pack(side=tk.LEFT, padx=4)
 
     label_words = tk.Label(root, text="Words: (none)", font=("Helvetica", 10), fg="gray")
     label_words.pack()
